@@ -376,10 +376,11 @@ export class MultiCursorSession {
 		}
 
 		this.findController.highlightFindOptions();
+		const findState = this.findController.getState();
 
 		const allSelections = this._editor.getSelections();
 		const lastAddedSelection = allSelections[allSelections.length - 1];
-		const nextMatch = this._editor.getModel().findNextMatch(this.searchText, lastAddedSelection.getEndPosition(), false, this.matchCase, this.wholeWord ? this._editor.getOption(EditorOption.wordSeparators) : null, false);
+		const nextMatch = this._editor.getModel().findNextMatch(this.searchText, lastAddedSelection.getEndPosition(), findState.isRegex, this.matchCase, this.wholeWord ? this._editor.getOption(EditorOption.wordSeparators) : null, false);
 
 		if (!nextMatch) {
 			return null;

@@ -278,6 +278,35 @@ suite('Multicursor selection', () => {
 		});
 	});
 
+	test('issue #107090: Multiline Ctrl+D does not work with regex=true', () => {
+		withTestCodeEditor([
+			'line 1.',
+			'line 2.',
+			'line 3.',
+			'line 4.'
+		], { serviceCollection: serviceCollection }, (editor) => {
+
+			const findController = editor.registerAndInstantiateContribution(CommonFindController.ID, CommonFindController);
+			const multiCursorSelectController = editor.registerAndInstantiateContribution(MultiCursorSelectionController.ID, MultiCursorSelectionController);
+			const addSelectionToNextFindMatch = new AddSelectionToNextFindMatchAction();
+
+			findController.setSearchString('\d\.');
+			findController.toggleRegex();
+			editor.setSelection(new Selection(1, 6, 1, 6));
+
+			addSelectionToNextFindMatch.run(null!, editor);
+			addSelectionToNextFindMatch.run(null!, editor);
+			assert.deepStrictEqual(findController.getState().isRegex, true);
+			assert.deepStrictEqual(editor.getSelections()!.map(fromRange), [
+				[1, 6, 1, 8],
+				[2, 6, 2, 8]
+			]);
+
+			multiCursorSelectController.dispose();
+			findController.dispose();
+		});
+	});
+
 	function testMulticursor(text: string[], callback: (editor: ITestCodeEditor, findController: CommonFindController) => void): void {
 		withTestCodeEditor(text, { serviceCollection: serviceCollection }, (editor) => {
 			const findController = editor.registerAndInstantiateContribution(CommonFindController.ID, CommonFindController);
