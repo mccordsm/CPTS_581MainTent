@@ -37,13 +37,15 @@ import { ILanguageFeaturesService } from 'vs/editor/common/services/languageFeat
 
 const $ = dom.$;
 
-class InspectEditorTokensController extends Disposable implements IEditorContribution {
+export class InspectEditorTokensController extends Disposable implements IEditorContribution {
 
 	public static readonly ID = 'editor.contrib.inspectEditorTokens';
 
 	public static get(editor: ICodeEditor): InspectEditorTokensController | null {
 		return editor.getContribution<InspectEditorTokensController>(InspectEditorTokensController.ID);
 	}
+
+	public updateListener: () => void = () => { };
 
 	private _editor: ICodeEditor;
 	private _textMateService: ITextMateService;
@@ -95,6 +97,9 @@ class InspectEditorTokensController extends Disposable implements IEditorContrib
 			return;
 		}
 		this._widget = new InspectEditorTokensWidget(this._editor, this._textMateService, this._languageService, this._themeService, this._notificationService, this._configurationService, this._languageFeaturesService);
+		this._widget.updateListender = () => {
+			this.updateListener();
+		};
 	}
 
 	public stop(): void {
@@ -130,7 +135,7 @@ class InspectEditorTokens extends EditorAction {
 	}
 }
 
-interface ITextMateTokenInfo {
+export interface ITextMateTokenInfo {
 	token: IToken;
 	metadata: IDecodedMetadata;
 }
@@ -179,7 +184,7 @@ function renderTokenText(tokenText: string): string {
 
 type SemanticTokensResult = { tokens: SemanticTokens; legend: SemanticTokensLegend };
 
-class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+export class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 
 	private static readonly _ID = 'editor.contrib.inspectEditorTokensWidget';
 
@@ -197,6 +202,7 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 	private readonly _model: ITextModel;
 	private readonly _domNode: HTMLElement;
 	private readonly _currentRequestCancellationTokenSource: CancellationTokenSource;
+	public updateListender: () => void = () => { };
 
 	constructor(
 		editor: IActiveCodeEditor,
@@ -252,6 +258,7 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 			this._compute(grammar, semanticTokens, position);
 			this._domNode.style.maxWidth = `${Math.max(this._editor.getLayoutInfo().width * 0.66, 500)}px`;
 			this._editor.layoutContentWidget(this);
+			this.updateListender();
 		}, (err) => {
 			this._notificationService.warn(err);
 
@@ -371,25 +378,27 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 				$('td.tiw-metadata-value.tiw-metadata-scopes', undefined, ...scopes),
 			));
 
-			const matchingRule = findMatchingThemeRule(theme, textMateTokenInfo.token.scopes, false);
-			const semForeground = semanticTokenInfo?.metadata?.foreground;
-			if (matchingRule) {
-				if (semForeground !== textMateTokenInfo.metadata.foreground) {
-					let defValue = $('code.tiw-theme-selector', undefined,
-						matchingRule.rawSelector, $('br'), JSON.stringify(matchingRule.settings, null, '\t'));
-					if (semForeground) {
-						defValue = $('s', undefined, defValue);
+			if (textMateTokenInfo.token && theme && theme.tokenColors) {
+				const matchingRule = findMatchingThemeRule(theme, textMateTokenInfo.token.scopes, false);
+				const semForeground = semanticTokenInfo?.metadata?.foreground;
+				if (matchingRule) {
+					if (semForeground !== textMateTokenInfo.metadata.foreground) {
+						let defValue = $('code.tiw-theme-selector', undefined,
+							matchingRule.rawSelector, $('br'), JSON.stringify(matchingRule.settings, null, '\t'));
+						if (semForeground) {
+							defValue = $('s', undefined, defValue);
+						}
+						dom.append(tbody, $('tr', undefined,
+							$('td.tiw-metadata-key', undefined, 'foreground'),
+							$('td.tiw-metadata-value', undefined, defValue),
+						));
 					}
+				} else if (!semForeground) {
 					dom.append(tbody, $('tr', undefined,
 						$('td.tiw-metadata-key', undefined, 'foreground'),
-						$('td.tiw-metadata-value', undefined, defValue),
+						$('td.tiw-metadata-value', undefined, 'No theme selector' as string),
 					));
 				}
-			} else if (!semForeground) {
-				dom.append(tbody, $('tr', undefined,
-					$('td.tiw-metadata-key', undefined, 'foreground'),
-					$('td.tiw-metadata-value', undefined, 'No theme selector' as string),
-				));
 			}
 		}
 	}
@@ -484,9 +493,10 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 		}
 	}
 
-	private _getTokensAtPosition(grammar: IGrammar, position: Position): ITextMateTokenInfo {
+	protected _getTokensAtPosition(grammar: IGrammar, position: Position): ITextMateTokenInfo {
 		const lineNumber = position.lineNumber;
 		const stateBeforeLine = this._getStateBeforeLine(grammar, lineNumber);
+		const defaultLanguage = this._model.getLanguageId();
 
 		const tokenizationResult1 = grammar.tokenizeLine(this._model.getLineContent(lineNumber), stateBeforeLine);
 		const tokenizationResult2 = grammar.tokenizeLine2(this._model.getLineContent(lineNumber), stateBeforeLine);
@@ -502,6 +512,15 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
 
 		let token2Index = 0;
 		for (let i = (tokenizationResult2.tokens.length >>> 1); i >= 0; i--) {
+			const isRightEdge = position.column - 1 === tokenizationResult2.tokens[(i << 1)];
+			const metadata = this._decodeMetadata(tokenizationResult2.tokens[(i << 1) + 1]);
+			const isDefaultAtRightEdge = metadata.languageId === defaultLanguage && isRightEdge && i !== 0;
+			if (isDefaultAtRightEdge) {
+				// Go back one token if higher edge is default language
+				token1Index--;
+				token2Index = i - 1;
+				break;
+			}
 			if (position.column - 1 >= tokenizationResult2.tokens[(i << 1)]) {
 				token2Index = i;
 				break;

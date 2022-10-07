@@ -5,7 +5,7 @@
 
 import { DisposableStore, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
 import { EditorConfiguration, IEditorConstructionOptions } from 'vs/editor/browser/config/editorConfiguration';
-import { IActiveCodeEditor, ICodeEditor } from 'vs/editor/browser/editorBrowser';
+import { IActiveCodeEditor, ICodeEditor, IContentWidget } from 'vs/editor/browser/editorBrowser';
 import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
 import { View } from 'vs/editor/browser/view';
 import { CodeEditorWidget, ICodeEditorWidgetOptions } from 'vs/editor/browser/widget/codeEditorWidget';
@@ -54,6 +54,7 @@ import { IThemeService } from 'vs/platform/theme/common/themeService';
 import { TestThemeService } from 'vs/platform/theme/test/common/testThemeService';
 import { IUndoRedoService } from 'vs/platform/undoRedo/common/undoRedo';
 import { UndoRedoService } from 'vs/platform/undoRedo/common/undoRedoService';
+import * as dom from 'vs/base/browser/dom';
 
 export interface ITestCodeEditor extends IActiveCodeEditor {
 	getViewModel(): ViewModel | undefined;
@@ -62,7 +63,7 @@ export interface ITestCodeEditor extends IActiveCodeEditor {
 }
 
 export class TestCodeEditor extends CodeEditorWidget implements ICodeEditor {
-
+	_domNode = dom.$('html');
 	//#region testing overrides
 	protected override _createConfiguration(isSimpleWidget: boolean, options: Readonly<IEditorConstructionOptions>): EditorConfiguration {
 		return new TestConfiguration(options);
@@ -92,6 +93,15 @@ export class TestCodeEditor extends CodeEditorWidget implements ICodeEditor {
 	public registerDisposable(disposable: IDisposable): void {
 		this._register(disposable);
 	}
+
+	override getDomNode(): HTMLElement | null {
+		return this._domNode;
+	}
+
+	override addContentWidget(widget: IContentWidget): void {
+		this.getDomNode()?.append(widget.getDomNode());
+	}
+
 }
 
 class TestEditorDomElement {
