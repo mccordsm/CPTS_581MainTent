@@ -124,6 +124,25 @@ export class IconLabel extends Disposable {
 		return this.domNode.element;
 	}
 
+	static shortenPathFromLeft(_fullPath: string, maxLen: Number, minFolders: Number): string {
+		const fullPath = _fullPath;
+		let simplifiedPath = '';
+
+		const folders = fullPath.split('/');
+		if (fullPath.length > maxLen && folders.length > minFolders) {
+			folders[0] = '...';
+			simplifiedPath = folders.join('/');
+			while (simplifiedPath.length > maxLen && folders.length > minFolders) {
+				folders.splice(1, 1);
+				simplifiedPath = folders.join('/');
+			}
+		} else {
+			simplifiedPath = fullPath;
+		}
+
+		return simplifiedPath;
+	}
+
 	setLabel(label: string | string[], description?: string, options?: IIconLabelValueOptions): void {
 		const labelClasses = ['monaco-icon-label'];
 		const containerClasses = ['monaco-icon-label-container'];
@@ -150,6 +169,13 @@ export class IconLabel extends Disposable {
 		this.setupHover(options?.descriptionTitle ? this.labelContainer : this.element, options?.title);
 
 		this.nameNode.setLabel(label, options);
+		if (description) {
+			// 35 is not specific, just nice length
+			if (description.length > 35) {
+				// 35 chars + 3 for ellipsis
+				description = IconLabel.shortenPathFromLeft(description, 38, 2);
+			}
+		}
 
 		if (description || this.descriptionNode) {
 			if (!this.descriptionNode) {
