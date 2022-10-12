@@ -1,0 +1,96 @@
+From 404039e5d0976cfaad30110ce36d43c14eae83bf Mon Sep 17 00:00:00 2001
+From: Gephery <gephery@gmail.com>
+Date: Wed, 12 Oct 2022 20:12:03 +0300
+Subject: [PATCH] Issue #148644, feature request for left collapse of folder
+ path.
+
+Our local issue tracker has it labeled as #14.
+---
+ src/vs/base/browser/ui/iconLabel/iconLabel.ts | 26 ++++++++++++++++
+ .../browser/ui/iconLabel/iconLabel.test.ts    | 30 +++++++++++++++++++
+ 2 files changed, 56 insertions(+)
+ create mode 100644 src/vs/base/test/browser/ui/iconLabel/iconLabel.test.ts
+
+diff --git a/src/vs/base/browser/ui/iconLabel/iconLabel.ts b/src/vs/base/browser/ui/iconLabel/iconLabel.ts
+index dbd32cc..ce39bad 100644
+--- a/src/vs/base/browser/ui/iconLabel/iconLabel.ts
++++ b/src/vs/base/browser/ui/iconLabel/iconLabel.ts
+@@ -124,6 +124,25 @@ export class IconLabel extends Disposable {
+ 		return this.domNode.element;
+ 	}
+ 
++	static shortenPathFromLeft(_fullPath: string, maxLen: Number, minFolders: Number): string {
++		const fullPath = _fullPath;
++		let simplifiedPath = '';
++
++		const folders = fullPath.split('/');
++		if (fullPath.length > maxLen && folders.length > minFolders) {
++			folders[0] = '...';
++			simplifiedPath = folders.join('/');
++			while (simplifiedPath.length > maxLen && folders.length > minFolders) {
++				folders.splice(1, 1);
++				simplifiedPath = folders.join('/');
++			}
++		} else {
++			simplifiedPath = fullPath;
++		}
++
++		return simplifiedPath;
++	}
++
+ 	setLabel(label: string | string[], description?: string, options?: IIconLabelValueOptions): void {
+ 		const labelClasses = ['monaco-icon-label'];
+ 		const containerClasses = ['monaco-icon-label-container'];
+@@ -150,6 +169,13 @@ export class IconLabel extends Disposable {
+ 		this.setupHover(options?.descriptionTitle ? this.labelContainer : this.element, options?.title);
+ 
+ 		this.nameNode.setLabel(label, options);
++		if (description) {
++			// 35 is not specific, just nice length
++			if (description.length > 35) {
++				// 35 chars + 3 for ellipsis
++				description = IconLabel.shortenPathFromLeft(description, 38, 2);
++			}
++		}
+ 
+ 		if (description || this.descriptionNode) {
+ 			if (!this.descriptionNode) {
+diff --git a/src/vs/base/test/browser/ui/iconLabel/iconLabel.test.ts b/src/vs/base/test/browser/ui/iconLabel/iconLabel.test.ts
+new file mode 100644
+index 0000000..b5f0b79
+--- /dev/null
++++ b/src/vs/base/test/browser/ui/iconLabel/iconLabel.test.ts
+@@ -0,0 +1,30 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as assert from 'assert';
++import { IconLabel } from 'vs/base/browser/ui/iconLabel/iconLabel';
++
++suite('IconLabel', function () {
++	function getPathMultipleOfTen(multiplier: Number) {
++		const tenChars = '0123456789';
++		let sum = tenChars;
++		for (let timesMultiplied = 1; timesMultiplied < multiplier; timesMultiplied++) {
++			sum += '/' + tenChars;
++		}
++		return sum;
++	}
++	assert.equal(getPathMultipleOfTen(1), '0123456789', 'getPathMultipleOfTen helper function is broken on 1');
++	assert.equal(getPathMultipleOfTen(2), '0123456789/0123456789', 'getPathMultipleOfTen helper function is broken on 2');
++
++	test('first folder is ... in larger than 35 char', function () {
++		const path40 = getPathMultipleOfTen(4);
++		assert.strictEqual(IconLabel.shortenPathFromLeft(path40, 38, 2), '.../' + getPathMultipleOfTen(3));
++	});
++
++	test('remove 3 folders', function () {
++		const path60 = getPathMultipleOfTen(6);
++		assert.strictEqual(IconLabel.shortenPathFromLeft(path60, 38, 2), '.../' + getPathMultipleOfTen(3));
++	});
++});
+-- 
+2.37.0 (Apple Git-136)
+

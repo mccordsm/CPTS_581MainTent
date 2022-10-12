@@ -1,0 +1,315 @@
+From 0430d4274b68cc5af7f04ae9f775f05d5a45fab6 Mon Sep 17 00:00:00 2001
+From: Gephery <gephery@gmail.com>
+Date: Fri, 7 Oct 2022 10:45:16 +0300
+Subject: [PATCH] Issue #148644 fix and tests.
+
+Small fix to visual tool. The overlapping nature of the tokenization means the fix had to be a visual only change.
+---
+ src/vs/editor/test/browser/testCodeEditor.ts  |  14 ++-
+ .../inspectEditorTokens.ts                    |  55 ++++++---
+ .../test/browser/inspectEditorTokens.test.ts  | 111 ++++++++++++++++++
+ 3 files changed, 160 insertions(+), 20 deletions(-)
+ create mode 100644 src/vs/workbench/contrib/codeEditor/test/browser/inspectEditorTokens.test.ts
+
+diff --git a/src/vs/editor/test/browser/testCodeEditor.ts b/src/vs/editor/test/browser/testCodeEditor.ts
+index bdcc66b..6f184cb 100644
+--- a/src/vs/editor/test/browser/testCodeEditor.ts
++++ b/src/vs/editor/test/browser/testCodeEditor.ts
+@@ -5,7 +5,7 @@
+ 
+ import { DisposableStore, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
+ import { EditorConfiguration, IEditorConstructionOptions } from 'vs/editor/browser/config/editorConfiguration';
+-import { IActiveCodeEditor, ICodeEditor } from 'vs/editor/browser/editorBrowser';
++import { IActiveCodeEditor, ICodeEditor, IContentWidget } from 'vs/editor/browser/editorBrowser';
+ import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
+ import { View } from 'vs/editor/browser/view';
+ import { CodeEditorWidget, ICodeEditorWidgetOptions } from 'vs/editor/browser/widget/codeEditorWidget';
+@@ -54,6 +54,7 @@ import { IThemeService } from 'vs/platform/theme/common/themeService';
+ import { TestThemeService } from 'vs/platform/theme/test/common/testThemeService';
+ import { IUndoRedoService } from 'vs/platform/undoRedo/common/undoRedo';
+ import { UndoRedoService } from 'vs/platform/undoRedo/common/undoRedoService';
++import * as dom from 'vs/base/browser/dom';
+ 
+ export interface ITestCodeEditor extends IActiveCodeEditor {
+ 	getViewModel(): ViewModel | undefined;
+@@ -62,7 +63,7 @@ export interface ITestCodeEditor extends IActiveCodeEditor {
+ }
+ 
+ export class TestCodeEditor extends CodeEditorWidget implements ICodeEditor {
+-
++	_domNode = dom.$('html');
+ 	//#region testing overrides
+ 	protected override _createConfiguration(isSimpleWidget: boolean, options: Readonly<IEditorConstructionOptions>): EditorConfiguration {
+ 		return new TestConfiguration(options);
+@@ -92,6 +93,15 @@ export class TestCodeEditor extends CodeEditorWidget implements ICodeEditor {
+ 	public registerDisposable(disposable: IDisposable): void {
+ 		this._register(disposable);
+ 	}
++
++	override getDomNode(): HTMLElement | null {
++		return this._domNode;
++	}
++
++	override addContentWidget(widget: IContentWidget): void {
++		this.getDomNode()?.append(widget.getDomNode());
++	}
++
+ }
+ 
+ class TestEditorDomElement {
+diff --git a/src/vs/workbench/contrib/codeEditor/browser/inspectEditorTokens/inspectEditorTokens.ts b/src/vs/workbench/contrib/codeEditor/browser/inspectEditorTokens/inspectEditorTokens.ts
+index 34ca4a8..4562faf 100644
+--- a/src/vs/workbench/contrib/codeEditor/browser/inspectEditorTokens/inspectEditorTokens.ts
++++ b/src/vs/workbench/contrib/codeEditor/browser/inspectEditorTokens/inspectEditorTokens.ts
+@@ -37,7 +37,7 @@ import { ILanguageFeaturesService } from 'vs/editor/common/services/languageFeat
+ 
+ const $ = dom.$;
+ 
+-class InspectEditorTokensController extends Disposable implements IEditorContribution {
++export class InspectEditorTokensController extends Disposable implements IEditorContribution {
+ 
+ 	public static readonly ID = 'editor.contrib.inspectEditorTokens';
+ 
+@@ -45,6 +45,8 @@ class InspectEditorTokensController extends Disposable implements IEditorContrib
+ 		return editor.getContribution<InspectEditorTokensController>(InspectEditorTokensController.ID);
+ 	}
+ 
++	public updateListener: () => void = () => { };
++
+ 	private _editor: ICodeEditor;
+ 	private _textMateService: ITextMateService;
+ 	private _themeService: IWorkbenchThemeService;
+@@ -95,6 +97,9 @@ class InspectEditorTokensController extends Disposable implements IEditorContrib
+ 			return;
+ 		}
+ 		this._widget = new InspectEditorTokensWidget(this._editor, this._textMateService, this._languageService, this._themeService, this._notificationService, this._configurationService, this._languageFeaturesService);
++		this._widget.updateListender = () => {
++			this.updateListener();
++		};
+ 	}
+ 
+ 	public stop(): void {
+@@ -130,7 +135,7 @@ class InspectEditorTokens extends EditorAction {
+ 	}
+ }
+ 
+-interface ITextMateTokenInfo {
++export interface ITextMateTokenInfo {
+ 	token: IToken;
+ 	metadata: IDecodedMetadata;
+ }
+@@ -179,7 +184,7 @@ function renderTokenText(tokenText: string): string {
+ 
+ type SemanticTokensResult = { tokens: SemanticTokens; legend: SemanticTokensLegend };
+ 
+-class InspectEditorTokensWidget extends Disposable implements IContentWidget {
++export class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 
+ 	private static readonly _ID = 'editor.contrib.inspectEditorTokensWidget';
+ 
+@@ -197,6 +202,7 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 	private readonly _model: ITextModel;
+ 	private readonly _domNode: HTMLElement;
+ 	private readonly _currentRequestCancellationTokenSource: CancellationTokenSource;
++	public updateListender: () => void = () => { };
+ 
+ 	constructor(
+ 		editor: IActiveCodeEditor,
+@@ -252,6 +258,7 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 			this._compute(grammar, semanticTokens, position);
+ 			this._domNode.style.maxWidth = `${Math.max(this._editor.getLayoutInfo().width * 0.66, 500)}px`;
+ 			this._editor.layoutContentWidget(this);
++			this.updateListender();
+ 		}, (err) => {
+ 			this._notificationService.warn(err);
+ 
+@@ -371,25 +378,27 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 				$('td.tiw-metadata-value.tiw-metadata-scopes', undefined, ...scopes),
+ 			));
+ 
+-			const matchingRule = findMatchingThemeRule(theme, textMateTokenInfo.token.scopes, false);
+-			const semForeground = semanticTokenInfo?.metadata?.foreground;
+-			if (matchingRule) {
+-				if (semForeground !== textMateTokenInfo.metadata.foreground) {
+-					let defValue = $('code.tiw-theme-selector', undefined,
+-						matchingRule.rawSelector, $('br'), JSON.stringify(matchingRule.settings, null, '\t'));
+-					if (semForeground) {
+-						defValue = $('s', undefined, defValue);
++			if (textMateTokenInfo.token && theme && theme.tokenColors) {
++				const matchingRule = findMatchingThemeRule(theme, textMateTokenInfo.token.scopes, false);
++				const semForeground = semanticTokenInfo?.metadata?.foreground;
++				if (matchingRule) {
++					if (semForeground !== textMateTokenInfo.metadata.foreground) {
++						let defValue = $('code.tiw-theme-selector', undefined,
++							matchingRule.rawSelector, $('br'), JSON.stringify(matchingRule.settings, null, '\t'));
++						if (semForeground) {
++							defValue = $('s', undefined, defValue);
++						}
++						dom.append(tbody, $('tr', undefined,
++							$('td.tiw-metadata-key', undefined, 'foreground'),
++							$('td.tiw-metadata-value', undefined, defValue),
++						));
+ 					}
++				} else if (!semForeground) {
+ 					dom.append(tbody, $('tr', undefined,
+ 						$('td.tiw-metadata-key', undefined, 'foreground'),
+-						$('td.tiw-metadata-value', undefined, defValue),
++						$('td.tiw-metadata-value', undefined, 'No theme selector' as string),
+ 					));
+ 				}
+-			} else if (!semForeground) {
+-				dom.append(tbody, $('tr', undefined,
+-					$('td.tiw-metadata-key', undefined, 'foreground'),
+-					$('td.tiw-metadata-value', undefined, 'No theme selector' as string),
+-				));
+ 			}
+ 		}
+ 	}
+@@ -484,9 +493,10 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 		}
+ 	}
+ 
+-	private _getTokensAtPosition(grammar: IGrammar, position: Position): ITextMateTokenInfo {
++	protected _getTokensAtPosition(grammar: IGrammar, position: Position): ITextMateTokenInfo {
+ 		const lineNumber = position.lineNumber;
+ 		const stateBeforeLine = this._getStateBeforeLine(grammar, lineNumber);
++		const defaultLanguage = this._model.getLanguageId();
+ 
+ 		const tokenizationResult1 = grammar.tokenizeLine(this._model.getLineContent(lineNumber), stateBeforeLine);
+ 		const tokenizationResult2 = grammar.tokenizeLine2(this._model.getLineContent(lineNumber), stateBeforeLine);
+@@ -502,6 +512,15 @@ class InspectEditorTokensWidget extends Disposable implements IContentWidget {
+ 
+ 		let token2Index = 0;
+ 		for (let i = (tokenizationResult2.tokens.length >>> 1); i >= 0; i--) {
++			const isRightEdge = position.column - 1 === tokenizationResult2.tokens[(i << 1)];
++			const metadata = this._decodeMetadata(tokenizationResult2.tokens[(i << 1) + 1]);
++			const isDefaultAtRightEdge = metadata.languageId === defaultLanguage && isRightEdge && i !== 0;
++			if (isDefaultAtRightEdge) {
++				// Go back one token if higher edge is default language
++				token1Index--;
++				token2Index = i - 1;
++				break;
++			}
+ 			if (position.column - 1 >= tokenizationResult2.tokens[(i << 1)]) {
+ 				token2Index = i;
+ 				break;
+diff --git a/src/vs/workbench/contrib/codeEditor/test/browser/inspectEditorTokens.test.ts b/src/vs/workbench/contrib/codeEditor/test/browser/inspectEditorTokens.test.ts
+new file mode 100644
+index 0000000..9d1bd23
+--- /dev/null
++++ b/src/vs/workbench/contrib/codeEditor/test/browser/inspectEditorTokens.test.ts
+@@ -0,0 +1,111 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import * as assert from 'assert';
++import { Position } from 'vs/editor/common/core/position';
++import { ILanguageService } from 'vs/editor/common/languages/language';
++import { TextModel } from 'vs/editor/common/model/textModel';
++import { createTestCodeEditor, ITestCodeEditor } from 'vs/editor/test/browser/testCodeEditor';
++import { createTextModel } from 'vs/editor/test/common/testTextModel';
++import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
++import { ServiceCollection } from 'vs/platform/instantiation/common/serviceCollection';
++import { InspectEditorTokensController } from 'vs/workbench/contrib/codeEditor/browser/inspectEditorTokens/inspectEditorTokens';
++import { ITextMateService } from 'vs/workbench/services/textMate/browser/textMate';
++import { IGrammar, ITokenizeLineResult, ITokenizeLineResult2, StackElement } from 'vscode-textmate';
++
++
++
++suite('inspectEditorTokens', function () {
++	class TestGrammar implements IGrammar {
++		tokenizeLine(_lineText: string, _prevState: StackElement | null, _timeLimit?: number | undefined): ITokenizeLineResult {
++			return {
++				tokens: [
++					{ startIndex: 0, endIndex: 5, scopes: ['text.html.markdown', 'meta.paragraph.markdown'] },
++					{ startIndex: 5, endIndex: 6, scopess: ['text.html.markdown', 'meta.paragraph.markdown', 'markup.math.inline.markdown', 'punctuation.definition.math.begin.markdown'] },
++					{ startIndex: 6, endIndex: 10, scopes: ['text.html.markdown', 'meta.paragraph.markdown', 'markup.math.inline.markdown', 'meta.embedded.math.markdown', 'constant.numeric.math.tex'] },
++					{ startIndex: 10, endIndex: 11, scopes: ['text.html.markdown', 'meta.paragraph.markdown', 'markup.math.inline.markdown', 'punctuation.definition.math.begin.markdown'] },
++					{ startIndex: 11, endIndex: 13, scopes: ['text.html.markdown', 'meta.paragraph.markdown'] },
++				],
++				ruleStack: null,
++			} as unknown as ITokenizeLineResult;
++		}
++		tokenizeLine2(_lineText: string, _prevState: StackElement | null, _timeLimit?: number | undefined): ITokenizeLineResult2 {
++			return {
++				tokens: [
++					0, 33588268, 6, 33752101, 10, 33588268
++				]
++			} as unknown as ITokenizeLineResult2;
++		}
++
++	}
++
++
++	async function retTestGrammar(_position: Position): Promise<IGrammar | null> {
++		return new TestGrammar();
++	}
++
++	const testTextMate = {
++		onDidEncounterLanguage: () => { },
++		createGrammar: retTestGrammar,
++		startDebugMode: () => { }
++	} as unknown as ITextMateService;
++
++
++	const serviceCollection = new ServiceCollection();
++	serviceCollection.set(ITextMateService, testTextMate);
++	serviceCollection.set(IConfigurationService, {
++		getValue: (_section: string) => {
++			return { enabled: false };
++		},
++		onDidChangeConfiguration: (_) => {
++
++		}
++	} as IConfigurationService);
++	serviceCollection.set(ILanguageService, {
++		languageIdCodec: {
++			decodeLanguageId: (langID: number) => {
++				if (langID === 37) {
++					return 'latex';
++				} else {
++					return 'markdown';
++				}
++			}
++		}
++	} as unknown as ILanguageService);
++
++	let controller: InspectEditorTokensController;
++	let editor: ITestCodeEditor;
++	let model: TextModel;
++
++	setup(() => {
++		model = createTextModel('##title\n1234 $5678$ ');
++		editor = createTestCodeEditor(model, { serviceCollection });
++		editor.setPosition(new Position(2, 11));
++		editor.getModel().setMode('markdown');
++		controller = editor.registerAndInstantiateContribution(InspectEditorTokensController.ID, InspectEditorTokensController);
++		controller.launch();
++	});
++
++	teardown(() => {
++		controller.dispose();
++		editor.dispose();
++		model.dispose();
++	});
++
++	test('issue #148644, language scope markdown math', async function () {
++		// await timeout(10);
++		const testLanguageTexts = ['latex', 'markdown'];
++		let languageIndex = 0;
++		controller.updateListener = () => {
++			const languageText = editor.getDomNode().getElementsByClassName('tiw-metadata-value')[0].textContent;
++			assert.strictEqual(languageText, testLanguageTexts[languageIndex]);
++			languageIndex++;
++		};
++
++		editor.setPosition(new Position(2, 12));
++	});
++
++
++});
+-- 
+2.37.0 (Apple Git-136)
+

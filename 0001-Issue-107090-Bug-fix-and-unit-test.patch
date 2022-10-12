@@ -1,0 +1,70 @@
+From 0a966a6f8944377f0e1b3782b399a7c1cf8005c9 Mon Sep 17 00:00:00 2001
+From: Max Grucella <gephery@gmail.com>
+Date: Tue, 27 Sep 2022 21:10:23 +0300
+Subject: [PATCH] Issue #107090 Bug fix and unit test.
+
+---
+ .../multicursor/browser/multicursor.ts        |  3 +-
+ .../test/browser/multicursor.test.ts          | 29 +++++++++++++++++++
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+diff --git a/src/vs/editor/contrib/multicursor/browser/multicursor.ts b/src/vs/editor/contrib/multicursor/browser/multicursor.ts
+index aed9742..4a9cdb0 100644
+--- a/src/vs/editor/contrib/multicursor/browser/multicursor.ts
++++ b/src/vs/editor/contrib/multicursor/browser/multicursor.ts
+@@ -376,10 +376,11 @@ export class MultiCursorSession {
+ 		}
+ 
+ 		this.findController.highlightFindOptions();
++		const findState = this.findController.getState();
+ 
+ 		const allSelections = this._editor.getSelections();
+ 		const lastAddedSelection = allSelections[allSelections.length - 1];
+-		const nextMatch = this._editor.getModel().findNextMatch(this.searchText, lastAddedSelection.getEndPosition(), false, this.matchCase, this.wholeWord ? this._editor.getOption(EditorOption.wordSeparators) : null, false);
++		const nextMatch = this._editor.getModel().findNextMatch(this.searchText, lastAddedSelection.getEndPosition(), findState.isRegex, this.matchCase, this.wholeWord ? this._editor.getOption(EditorOption.wordSeparators) : null, false);
+ 
+ 		if (!nextMatch) {
+ 			return null;
+diff --git a/src/vs/editor/contrib/multicursor/test/browser/multicursor.test.ts b/src/vs/editor/contrib/multicursor/test/browser/multicursor.test.ts
+index 70f5e5a..1aaf957 100644
+--- a/src/vs/editor/contrib/multicursor/test/browser/multicursor.test.ts
++++ b/src/vs/editor/contrib/multicursor/test/browser/multicursor.test.ts
+@@ -278,6 +278,35 @@ suite('Multicursor selection', () => {
+ 		});
+ 	});
+ 
++	test('issue #107090: Multiline Ctrl+D does not work with regex=true', () => {
++		withTestCodeEditor([
++			'line 1.',
++			'line 2.',
++			'line 3.',
++			'line 4.'
++		], { serviceCollection: serviceCollection }, (editor) => {
++
++			const findController = editor.registerAndInstantiateContribution(CommonFindController.ID, CommonFindController);
++			const multiCursorSelectController = editor.registerAndInstantiateContribution(MultiCursorSelectionController.ID, MultiCursorSelectionController);
++			const addSelectionToNextFindMatch = new AddSelectionToNextFindMatchAction();
++
++			findController.setSearchString('\d\.');
++			findController.toggleRegex();
++			editor.setSelection(new Selection(1, 6, 1, 6));
++
++			addSelectionToNextFindMatch.run(null!, editor);
++			addSelectionToNextFindMatch.run(null!, editor);
++			assert.deepStrictEqual(findController.getState().isRegex, true);
++			assert.deepStrictEqual(editor.getSelections()!.map(fromRange), [
++				[1, 6, 1, 8],
++				[2, 6, 2, 8]
++			]);
++
++			multiCursorSelectController.dispose();
++			findController.dispose();
++		});
++	});
++
+ 	function testMulticursor(text: string[], callback: (editor: ITestCodeEditor, findController: CommonFindController) => void): void {
+ 		withTestCodeEditor(text, { serviceCollection: serviceCollection }, (editor) => {
+ 			const findController = editor.registerAndInstantiateContribution(CommonFindController.ID, CommonFindController);
+-- 
+2.37.0 (Apple Git-136)
+
