@@ -292,6 +292,33 @@ suite('ExtHostDiagnostics', () => {
 		assert.strictEqual(lastEntries[0][1][250].severity, MarkerSeverity.Info);
 	});
 
+	test('diagnostic capping for new limit', function () {
+
+		let lastEntries!: [UriComponents, IMarkerData[]][];
+		const collection = new DiagnosticCollection('test', 'test', 250, extUri, new class extends DiagnosticsShape {
+			override $changeMany(owner: string, entries: [UriComponents, IMarkerData[]][]): void {
+				lastEntries = entries;
+				return super.$changeMany(owner, entries);
+			}
+		}, new Emitter());
+		const uri = URI.parse('aa:bb');
+
+		const diagnostics: Diagnostic[] = [];
+		for (let i = 0; i < 5000; i++) {
+			diagnostics.push(new Diagnostic(new Range(i, 0, i + 1, 0), `error#${i}`, i < 300
+				? DiagnosticSeverity.Warning
+				: DiagnosticSeverity.Error));
+		}
+
+		collection.set(uri, diagnostics);
+		assert.strictEqual(collection.get(uri).length, 5000);
+		assert.strictEqual(lastEntries.length, 1);
+		assert.strictEqual(lastEntries[0][1].length, 251);
+		assert.strictEqual(lastEntries[0][1][0].severity, MarkerSeverity.Error);
+		assert.strictEqual(lastEntries[0][1][200].severity, MarkerSeverity.Warning);
+		assert.strictEqual(lastEntries[0][1][250].severity, MarkerSeverity.Info);
+	});
+
 	test('diagnostic eventing', async function () {
 		const emitter = new Emitter<Array<URI>>();
 		const collection = new DiagnosticCollection('ddd', 'test', 100, extUri, new DiagnosticsShape(), emitter);

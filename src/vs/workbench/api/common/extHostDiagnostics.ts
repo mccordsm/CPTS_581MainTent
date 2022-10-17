@@ -220,7 +220,7 @@ export class DiagnosticCollection implements vscode.DiagnosticCollection {
 export class ExtHostDiagnostics implements ExtHostDiagnosticsShape {
 
 	private static _idPool: number = 0;
-	private static readonly _maxDiagnosticsPerFile: number = 1000;
+	private static readonly _maxDiagnosticsPerFile: number = 10000;
 
 	private readonly _proxy: MainThreadDiagnosticsShape;
 	private readonly _collections = new Map<string, DiagnosticCollection>();
