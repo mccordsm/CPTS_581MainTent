@@ -1,0 +1,131 @@
+diff --git a/extensions/vscode-api-tests/src/singlefolder-tests/editor.test.ts b/extensions/vscode-api-tests/src/singlefolder-tests/editor.test.ts
+index 070a169..8e7ebc6 100644
+--- a/extensions/vscode-api-tests/src/singlefolder-tests/editor.test.ts
++++ b/extensions/vscode-api-tests/src/singlefolder-tests/editor.test.ts
+@@ -211,6 +211,28 @@ suite('vscode API - editors', () => {
+ 		});
+ 	});
+ 
++	test('issue #159366: Cursor no longer selects entire tab', () => {
++		return withRandomFileEditor('Hello world!\n\tHello world!', (editor, _doc) => {
++
++			assert.strictEqual(editor.options.tabSize, 4);
++			assert.strictEqual(editor.options.insertSpaces, false);
++			assert.strictEqual(editor.options.cursorStyle, TextEditorCursorStyle.Line);
++			assert.strictEqual(editor.options.lineNumbers, TextEditorLineNumbersStyle.On);
++
++			editor.options = {
++				tabSize: 2
++			};
++
++			assert.strictEqual(editor.options.tabSize, 2);
++			assert.strictEqual(editor.options.insertSpaces, false);
++
++			editor.options.cursorStyle = TextEditorCursorStyle.BlockEnhanced;
++			assert.strictEqual(editor.options.cursorStyle, TextEditorCursorStyle.BlockEnhanced);
++
++			return Promise.resolve();
++		});
++	});
++
+ 	test('issue #20757: Overlapping ranges are not allowed!', () => {
+ 		return withRandomFileEditor('Hello world!\n\tHello world!', (editor, _doc) => {
+ 			return editor.edit((builder) => {
+diff --git a/src/vs/editor/browser/viewParts/viewCursors/viewCursor.ts b/src/vs/editor/browser/viewParts/viewCursors/viewCursor.ts
+index d362663..0034faf 100644
+--- a/src/vs/editor/browser/viewParts/viewCursors/viewCursor.ts
++++ b/src/vs/editor/browser/viewParts/viewCursors/viewCursor.ts
+@@ -179,6 +179,7 @@ export class ViewCursor {
+ 					? this._typicalHalfwidthCharacterWidth
+ 					: range.width)
+ 		);
++		const width_enhanced = range.width < 1 ? this._typicalHalfwidthCharacterWidth : range.width;
+ 
+ 		let textContentClassName = '';
+ 		if (this._cursorStyle === TextEditorCursorStyle.Block) {
+@@ -188,6 +189,13 @@ export class ViewCursor {
+ 			textContentClassName = lineData.tokens.getClassName(tokenIndex);
+ 		}
+ 
++		if (this._cursorStyle === TextEditorCursorStyle.BlockEnhanced) {
++			const lineData = this._context.viewModel.getViewLineData(position.lineNumber);
++			textContent = nextGrapheme;
++			const tokenIndex = lineData.tokens.findTokenIndexAtOffset(position.column - 1);
++			textContentClassName = lineData.tokens.getClassName(tokenIndex);
++		}
++
+ 		let top = ctx.getVerticalOffsetForLineNumber(position.lineNumber) - ctx.bigNumbersDelta;
+ 		let height = this._lineHeight;
+ 
+@@ -197,6 +205,9 @@ export class ViewCursor {
+ 			height = 2;
+ 		}
+ 
++		if (this._cursorStyle === TextEditorCursorStyle.BlockEnhanced) {
++			return new ViewCursorRenderData(top, range.left, width_enhanced, height, textContent, textContentClassName);
++		}
+ 		return new ViewCursorRenderData(top, range.left, width, height, textContent, textContentClassName);
+ 	}
+ 
+diff --git a/src/vs/editor/common/config/editorOptions.ts b/src/vs/editor/common/config/editorOptions.ts
+index 6e08c68..a991c4e 100644
+--- a/src/vs/editor/common/config/editorOptions.ts
++++ b/src/vs/editor/common/config/editorOptions.ts
+@@ -1342,13 +1342,17 @@ export enum TextEditorCursorStyle {
+ 	/**
+ 	 * As a thin horizontal line (sitting under a character).
+ 	 */
+-	UnderlineThin = 6
++	UnderlineThin = 6,
++	/**
++	 * As a block (sitting on top of a character) but with tab support.
++	 */
++	BlockEnhanced = 7
+ }
+ 
+ /**
+  * @internal
+  */
+-export function cursorStyleToString(cursorStyle: TextEditorCursorStyle): 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin' {
++export function cursorStyleToString(cursorStyle: TextEditorCursorStyle): 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin' | 'block-enhanced' {
+ 	switch (cursorStyle) {
+ 		case TextEditorCursorStyle.Line: return 'line';
+ 		case TextEditorCursorStyle.Block: return 'block';
+@@ -1356,10 +1360,11 @@ export function cursorStyleToString(cursorStyle: TextEditorCursorStyle): 'line'
+ 		case TextEditorCursorStyle.LineThin: return 'line-thin';
+ 		case TextEditorCursorStyle.BlockOutline: return 'block-outline';
+ 		case TextEditorCursorStyle.UnderlineThin: return 'underline-thin';
++		case TextEditorCursorStyle.BlockEnhanced: return 'block-enhanced';
+ 	}
+ }
+ 
+-function _cursorStyleFromString(cursorStyle: 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin'): TextEditorCursorStyle {
++function _cursorStyleFromString(cursorStyle: 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin' | 'block-enhanced'): TextEditorCursorStyle {
+ 	switch (cursorStyle) {
+ 		case 'line': return TextEditorCursorStyle.Line;
+ 		case 'block': return TextEditorCursorStyle.Block;
+@@ -1367,6 +1372,7 @@ function _cursorStyleFromString(cursorStyle: 'line' | 'block' | 'underline' | 'l
+ 		case 'line-thin': return TextEditorCursorStyle.LineThin;
+ 		case 'block-outline': return TextEditorCursorStyle.BlockOutline;
+ 		case 'underline-thin': return TextEditorCursorStyle.UnderlineThin;
++		case 'block-enhanced': return TextEditorCursorStyle.BlockEnhanced;
+ 	}
+ }
+ 
+diff --git a/src/vscode-dts/vscode.d.ts b/src/vscode-dts/vscode.d.ts
+index 2c90006..04505ad 100644
+--- a/src/vscode-dts/vscode.d.ts
++++ b/src/vscode-dts/vscode.d.ts
+@@ -612,7 +612,11 @@ declare module 'vscode' {
+ 		/**
+ 		 * Render the cursor as a thin horizontal line.
+ 		 */
+-		UnderlineThin = 6
++		UnderlineThin = 6,
++		/**
++		 * Render the cursor as a block filled with tab support.
++		 */
++		BlockEnhanced = 7
+ 	}
+ 
+ 	/**
