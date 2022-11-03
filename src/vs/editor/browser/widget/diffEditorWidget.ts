@@ -1863,7 +1863,7 @@ const DECORATIONS = {
 
 	arrowRevertChange: ModelDecorationOptions.register({
 		description: 'diff-editor-arrow-revert-change',
-		glyphMarginClassName: 'arrow-revert-change ' + ThemeIcon.asClassName(Codicon.arrowRight),
+		glyphMarginClassName: 'arrow-revert-change ',
 	}),
 
 	charDelete: ModelDecorationOptions.register({
@@ -2104,10 +2104,8 @@ class DiffEditorWidgetSideBySide extends DiffEditorWidgetStyle implements IVerti
 			// Arrows for reverting changes.
 			if (renderMarginRevertIcon) {
 				if (lineChange.modifiedEndLineNumber > 0) {
-					result.decorations.push({
-						range: new Range(lineChange.modifiedStartLineNumber, 1, lineChange.modifiedStartLineNumber, 1),
-						options: DECORATIONS.arrowRevertChange
-					});
+
+
 				} else {
 					const viewZone = zones.modified.find(z => z.afterLineNumber === lineChange.modifiedStartLineNumber);
 					if (viewZone) {
