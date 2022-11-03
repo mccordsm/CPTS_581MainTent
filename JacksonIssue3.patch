@@ -1,0 +1,107 @@
+diff --git a/src/vs/platform/files/common/fileService.ts b/src/vs/platform/files/common/fileService.ts
+index c05a937..c222959 100644
+--- a/src/vs/platform/files/common/fileService.ts
++++ b/src/vs/platform/files/common/fileService.ts
+@@ -10,6 +10,7 @@ import { CancellationToken, CancellationTokenSource } from 'vs/base/common/cance
+ import { Emitter } from 'vs/base/common/event';
+ import { hash } from 'vs/base/common/hash';
+ import { Iterable } from 'vs/base/common/iterator';
++import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
+ import { Disposable, DisposableStore, dispose, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
+ import { TernarySearchTree } from 'vs/base/common/map';
+ import { Schemas } from 'vs/base/common/network';
+@@ -21,6 +22,9 @@ import { localize } from 'vs/nls';
+ import { ensureFileSystemProviderError, etag, ETAG_DISABLED, FileChangesEvent, IFileDeleteOptions, FileOperation, FileOperationError, FileOperationEvent, FileOperationResult, FilePermission, FileSystemProviderCapabilities, FileSystemProviderErrorCode, FileType, hasFileAtomicReadCapability, hasFileFolderCopyCapability, hasFileReadStreamCapability, hasOpenReadWriteCloseCapability, hasReadWriteCapability, ICreateFileOptions, IFileContent, IFileService, IFileStat, IFileStatWithMetadata, IFileStreamContent, IFileSystemProvider, IFileSystemProviderActivationEvent, IFileSystemProviderCapabilitiesChangeEvent, IFileSystemProviderRegistrationEvent, IFileSystemProviderWithFileAtomicReadCapability, IFileSystemProviderWithFileReadStreamCapability, IFileSystemProviderWithFileReadWriteCapability, IFileSystemProviderWithOpenReadWriteCloseCapability, IReadFileOptions, IReadFileStreamOptions, IResolveFileOptions, IFileStatResult, IFileStatResultWithMetadata, IResolveMetadataFileOptions, IStat, IFileStatWithPartialMetadata, IWatchOptions, IWriteFileOptions, NotModifiedSinceFileOperationError, toFileOperationResult, toFileSystemProviderErrorCode, hasFileCloneCapability } from 'vs/platform/files/common/files';
+ import { readFileIntoStream } from 'vs/platform/files/common/io';
+ import { ILogService } from 'vs/platform/log/common/log';
++import { addDisposableListener, EventType } from 'vs/base/browser/dom';
++import { KeyCode } from 'vs/editor/editor.api';
++import { BaseActionViewItem } from 'vs/base/browser/ui/actionbar/actionViewItems';
+ 
+ export class FileService extends Disposable implements IFileService {
+ 
+@@ -341,7 +345,22 @@ export class FileService extends Disposable implements IFileService {
+ 	}
+ 
+ 	async createFile(resource: URI, bufferOrReadableOrStream: VSBuffer | VSBufferReadable | VSBufferReadableStream = VSBuffer.fromString(''), options?: ICreateFileOptions): Promise<IFileStatWithMetadata> {
++		this._register(addDisposableListener(new HTMLSelectElement, EventType.KEY_DOWN, async e => {
++			const event = new StandardKeyboardEvent(e);
++			if (event.equals(KeyCode.Shift) && event.equals(KeyCode.CapsLock)) {
++				const [historyService] = await createServices();
++				const activeFile = historyService.getLastActiveFile(Schemas.file);
++				const filename = activeFile.getFilename();
++				const pos = filename.lastIndexOf('.');
++				var ext;
++				if (filename === '' || pos < 1) {
++					ext = "";
++				}
++
++				ext = filename.slice(pos + 1);
+ 
++			}
++		}));
+ 		// validate
+ 		await this.doValidateCreateFile(resource, options);
+ 
+@@ -1349,3 +1368,7 @@ export class FileService extends Disposable implements IFileService {
+ 
+ 	//#endregion
+ }
++function createServices(): [any, any] | PromiseLike<[any, any]> {
++	throw new Error('Function not implemented.');
++}
++
+diff --git a/src/vs/platform/keybinding/test/common/abstractKeybindingService.test.ts b/src/vs/platform/keybinding/test/common/abstractKeybindingService.test.ts
+index cada490..60a9493 100644
+--- a/src/vs/platform/keybinding/test/common/abstractKeybindingService.test.ts
++++ b/src/vs/platform/keybinding/test/common/abstractKeybindingService.test.ts
+@@ -18,6 +18,8 @@ import { USLayoutResolvedKeybinding } from 'vs/platform/keybinding/common/usLayo
+ import { NullLogService } from 'vs/platform/log/common/log';
+ import { INotification, INotificationService, IPromptChoice, IPromptOptions, IStatusMessageOptions, NoOpNotification } from 'vs/platform/notification/common/notification';
+ import { NullTelemetryService } from 'vs/platform/telemetry/common/telemetryUtils';
++import { Promises } from 'vs/base/node/pfs';
++import { join } from 'vs/base/common/path';
+ 
+ function createContext(ctx: any) {
+ 	return {
+@@ -27,6 +29,8 @@ function createContext(ctx: any) {
+ 	};
+ }
+ 
++let testDir: string;
++
+ suite('AbstractKeybindingService', () => {
+ 
+ 	class TestKeybindingService extends AbstractKeybindingService {
+@@ -207,6 +211,31 @@ suite('AbstractKeybindingService', () => {
+ 		return usResolvedKeybinding.getLabel()!;
+ 	}
+ 
++	test('issue #160815: reuse file extension', async () => {
++		const kbService = createTestKeybindingService([
++			kbItem(KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyMod.CtrlCmd | KeyCode.KeyX), 'chordCommand'),
++			kbItem(KeyCode.Backspace, 'simpleCommand'),
++		]);
++
++		// send Shift/CapsLock
++		let shouldPreventDefault = kbService.testDispatch(KeyCode.CapsLock | KeyCode.Shift);
++		assert.strictEqual(shouldPreventDefault, true);
++		assert.deepStrictEqual(executeCommandCalls, []);
++		assert.deepStrictEqual(showMessageCalls, []);
++		assert.deepStrictEqual(statusMessageCalls, [
++			`(${toUsLabel(KeyMod.CtrlCmd | KeyCode.KeyK)}) was pressed. Waiting for second key of chord...`
++		]);
++		assert.deepStrictEqual(statusMessageCallsDisposed, []);
++		executeCommandCalls = [];
++		showMessageCalls = [];
++		statusMessageCalls = [];
++		statusMessageCallsDisposed = [];
++		const testFile = join(testDir, 'writefile.txt');
++		await Promises.writeFile(testFile, 'Hello World', (null!));
++		assert.ok(!(await Promises.exists(testFile)));
++
++	});
++
+ 	test('issue #16498: chord mode is quit for invalid chords', () => {
+ 
+ 		const kbService = createTestKeybindingService([
