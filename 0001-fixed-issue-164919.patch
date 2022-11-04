@@ -1,0 +1,38 @@
+From da6ddc2e3c0c7a4daf0caa69d9b4b92d1f1462e2 Mon Sep 17 00:00:00 2001
+From: mccordsm <sean.mccord@wsu.edu>
+Date: Thu, 3 Nov 2022 02:46:26 -0700
+Subject: [PATCH] fixed issue #164919
+
+---
+ src/vs/editor/browser/widget/diffEditorWidget.ts | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/src/vs/editor/browser/widget/diffEditorWidget.ts b/src/vs/editor/browser/widget/diffEditorWidget.ts
+index 9ca5996..177e793 100644
+--- a/src/vs/editor/browser/widget/diffEditorWidget.ts
++++ b/src/vs/editor/browser/widget/diffEditorWidget.ts
+@@ -1863,7 +1863,7 @@ const DECORATIONS = {
+ 
+ 	arrowRevertChange: ModelDecorationOptions.register({
+ 		description: 'diff-editor-arrow-revert-change',
+-		glyphMarginClassName: 'arrow-revert-change ' + ThemeIcon.asClassName(Codicon.arrowRight),
++		glyphMarginClassName: 'arrow-revert-change ',
+ 	}),
+ 
+ 	charDelete: ModelDecorationOptions.register({
+@@ -2104,10 +2104,8 @@ class DiffEditorWidgetSideBySide extends DiffEditorWidgetStyle implements IVerti
+ 			// Arrows for reverting changes.
+ 			if (renderMarginRevertIcon) {
+ 				if (lineChange.modifiedEndLineNumber > 0) {
+-					result.decorations.push({
+-						range: new Range(lineChange.modifiedStartLineNumber, 1, lineChange.modifiedStartLineNumber, 1),
+-						options: DECORATIONS.arrowRevertChange
+-					});
++
++
+ 				} else {
+ 					const viewZone = zones.modified.find(z => z.afterLineNumber === lineChange.modifiedStartLineNumber);
+ 					if (viewZone) {
+-- 
+2.38.0.windows.1
+
