@@ -21,6 +21,7 @@ import { TestInstantiationService } from 'vs/platform/instantiation/test/common/
 import { DeleteWordLeft } from 'vs/editor/contrib/wordOperations/browser/wordOperations';
 import { DeleteAllLeftAction } from 'vs/editor/contrib/linesOperations/browser/linesOperations';
 import { runWithFakedTimers } from 'vs/base/test/common/timeTravelScheduler';
+//import { debug } from 'util';
 
 const mockFile = URI.parse('test:somefile.ttt');
 const mockFileSelector = { scheme: 'test' };
@@ -393,6 +394,33 @@ suite('linked editing', () => {
 		editor.undo();
 		editor.undo();
 	}, '<ooo></ooo>');
+
+	// test('breakpoints', async function () {
+	// 	assert.strictEqual(debug.breakpoints.length, 0);
+	// 	let onDidChangeBreakpointsCounter = 0;
+	// 	const toDispose: Disposable[] = [];
+
+	// 	toDispose.push(debug.onDidChangeBreakpoints(() => {
+	// 		onDidChangeBreakpointsCounter++;
+	// 	}));
+
+	// 	debug.addBreakpoints([{ id: '1', enabled: true }, { id: '2', enabled: false, condition: '2 < 5' }]);
+	// 	assert.strictEqual(onDidChangeBreakpointsCounter, 1);
+	// 	assert.strictEqual(debug.breakpoints.length, 2);
+	// 	assert.strictEqual(debug.breakpoints[0].id, '1');
+	// 	assert.strictEqual(debug.breakpoints[1].id, '2');
+	// 	assert.strictEqual(debug.breakpoints[1].condition, '2 < 5');
+
+	// 	debug.removeBreakpoints([{ id: '1', enabled: true }]);
+	// 	assert.strictEqual(onDidChangeBreakpointsCounter, 2);
+	// 	assert.strictEqual(debug.breakpoints.length, 1);
+
+	// 	debug.removeBreakpoints([{ id: '2', enabled: false }]);
+	// 	assert.strictEqual(onDidChangeBreakpointsCounter, 3);
+	// 	assert.strictEqual(debug.breakpoints.length, 0);
+
+	// 	disposeAll(toDispose);
+	// });
 
 	/**
 	 * Todo: Fix test
