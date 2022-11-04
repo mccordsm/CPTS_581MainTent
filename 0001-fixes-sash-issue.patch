@@ -1,0 +1,256 @@
+From f815cf9e974c4477920377278042d2cddc69c2dd Mon Sep 17 00:00:00 2001
+From: mccordsm <sean.mccord@wsu.edu>
+Date: Thu, 3 Nov 2022 09:44:56 -0700
+Subject: [PATCH] fixes sash issue
+
+---
+ .../editor/browser/widget/diffEditorWidget.ts | 152 +++++++++++++-----
+ 1 file changed, 116 insertions(+), 36 deletions(-)
+
+diff --git a/src/vs/editor/browser/widget/diffEditorWidget.ts b/src/vs/editor/browser/widget/diffEditorWidget.ts
+index 177e793..49dd230 100644
+--- a/src/vs/editor/browser/widget/diffEditorWidget.ts
++++ b/src/vs/editor/browser/widget/diffEditorWidget.ts
+@@ -8,7 +8,7 @@ import * as nls from 'vs/nls';
+ import * as dom from 'vs/base/browser/dom';
+ import * as assert from 'vs/base/common/assert';
+ import { FastDomNode, createFastDomNode } from 'vs/base/browser/fastDomNode';
+-import { ISashEvent, IVerticalSashLayoutProvider, Sash, SashState, Orientation } from 'vs/base/browser/ui/sash/sash';
++import { ISashEvent, IVerticalSashLayoutProvider, Sash, SashState, Orientation, IHorizontalSashLayoutProvider } from 'vs/base/browser/ui/sash/sash';
+ import { RunOnceScheduler } from 'vs/base/common/async';
+ import { Color } from 'vs/base/common/color';
+ import { Emitter, Event } from 'vs/base/common/event';
+@@ -176,6 +176,7 @@ export class DiffEditorWidget extends Disposable implements editorBrowser.IDiffE
+ 
+ 	private static readonly ONE_OVERVIEW_WIDTH = 15;
+ 	public static readonly ENTIRE_DIFF_OVERVIEW_WIDTH = 30;
++	public static readonly ENTIRE_DIFF_OVERVIEW_HEIGHT = 30;
+ 	private static readonly UPDATE_DIFF_DECORATIONS_DELAY = 200; // ms
+ 
+ 	private readonly _onDidDispose: Emitter<void> = this._register(new Emitter<void>());
+@@ -1921,94 +1922,161 @@ const DECORATIONS = {
+ 
+ };
+ 
+-class DiffEditorWidgetSideBySide extends DiffEditorWidgetStyle implements IVerticalSashLayoutProvider {
++/**************************************************************************************** */
++class DiffEditorWidgetSideBySide extends DiffEditorWidgetStyle implements IVerticalSashLayoutProvider, IHorizontalSashLayoutProvider {
+ 
+ 	static readonly MINIMUM_EDITOR_WIDTH = 100;
++	static readonly MINIMUM_EDITOR_HEIGHT = 100;
+ 
+ 	private _disableSash: boolean;
+-	private readonly _sash: Sash;
++	private readonly _sashVertical: Sash;
++	private readonly _sashHorizontal: Sash;
+ 	private _sashRatio: number | null;
+-	private _sashPosition: number | null;
+-	private _startSashPosition: number | null;
++	private _sashPositionVertical: number | null;
++	private _startSashPositionHorizontal: number | null;
++	private _startSashPositionVertical: number | null;
++	private _sashPositionHorizontal: number | null;
++
+ 
+ 	constructor(dataSource: IDataSource, enableSplitViewResizing: boolean) {
+ 		super(dataSource);
+ 
+ 		this._disableSash = (enableSplitViewResizing === false);
+ 		this._sashRatio = null;
+-		this._sashPosition = null;
+-		this._startSashPosition = null;
+-		this._sash = this._register(new Sash(this._dataSource.getContainerDomNode(), this, { orientation: Orientation.VERTICAL }));
++		this._sashPositionVertical = null;
++		this._startSashPositionVertical = null;
++		this._startSashPositionHorizontal = null;
++		this._sashPositionHorizontal = null;
++		this._sashVertical = this._register(new Sash(this._dataSource.getContainerDomNode(), this, { orientation: Orientation.VERTICAL }));
++		this._sashHorizontal = this._register(new Sash(this._dataSource.getContainerDomNode(), this, { orientation: Orientation.HORIZONTAL }));
+ 
+ 		if (this._disableSash) {
+-			this._sash.state = SashState.Disabled;
++			this._sashVertical.state = SashState.Disabled;
+ 		}
+ 
+-		this._sash.onDidStart(() => this._onSashDragStart());
+-		this._sash.onDidChange((e: ISashEvent) => this._onSashDrag(e));
+-		this._sash.onDidEnd(() => this._onSashDragEnd());
+-		this._sash.onDidReset(() => this._onSashReset());
++		this._sashVertical.orthogonalStartSash = this._sashHorizontal;
++		this._sashVertical.orthogonalEndSash = this._sashHorizontal;
++		//this._sashVertical.orthogonalStartSash = this._sashVertical;
++		//this._sashVertical.orthogonalEndSash = this._sashVertical;
++
++		this._sashVertical.onDidStart(() => this._onSashVerticalDragStart());
++		this._sashVertical.onDidChange((e: ISashEvent) => this._onSashVerticalDrag(e));
++		this._sashVertical.onDidEnd(() => this._onSashVerticalDragEnd());
++		this._sashVertical.onDidReset(() => this._onSashVerticalReset());
++
++		this._sashHorizontal.onDidStart(() => this._onSashHorizontalDragStart());
++		this._sashHorizontal.onDidChange((e: ISashEvent) => this._onSashHorizontalDrag(e));
++		this._sashHorizontal.onDidEnd(() => this._onSashHorizontalDragEnd());
++		this._sashHorizontal.onDidReset(() => this._onSashHorizontalReset());
+ 	}
+ 
+ 	public setEnableSplitViewResizing(enableSplitViewResizing: boolean): void {
+ 		const newDisableSash = (enableSplitViewResizing === false);
+ 		if (this._disableSash !== newDisableSash) {
+ 			this._disableSash = newDisableSash;
+-			this._sash.state = this._disableSash ? SashState.Disabled : SashState.Enabled;
++			this._sashVertical.state = this._disableSash ? SashState.Disabled : SashState.Enabled;
+ 		}
+ 	}
+ 
+ 	public layout(sashRatio: number | null = this._sashRatio): number {
+ 		const w = this._dataSource.getWidth();
++		const h = this._dataSource.getHeight();
+ 		const contentWidth = w - (this._dataSource.getOptions().renderOverviewRuler ? DiffEditorWidget.ENTIRE_DIFF_OVERVIEW_WIDTH : 0);
++		const contentHieght = h - (this._dataSource.getOptions().renderOverviewRuler ? DiffEditorWidget.ENTIRE_DIFF_OVERVIEW_HEIGHT : 0);
+ 
+-		let sashPosition = Math.floor((sashRatio || 0.5) * contentWidth);
+-		const midPoint = Math.floor(0.5 * contentWidth);
++		let sashVerticalPosition = Math.floor((sashRatio || 0.5) * contentWidth);
++		let sashHorizontalPosition = Math.floor((sashRatio || 0.2) * contentHieght);
++		const midPointVertical = Math.floor(0.5 * contentWidth);
++		const midPointHorizontal = Math.floor(0.5 * contentWidth);
+ 
+-		sashPosition = this._disableSash ? midPoint : sashPosition || midPoint;
++		sashVerticalPosition = this._disableSash ? midPointVertical : sashVerticalPosition || midPointVertical;
++		sashHorizontalPosition = this._disableSash ? midPointHorizontal : sashHorizontalPosition || midPointHorizontal;
+ 
+ 		if (contentWidth > DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH * 2) {
+-			if (sashPosition < DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH) {
+-				sashPosition = DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH;
++			if (sashVerticalPosition < DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH) {
++				sashVerticalPosition = DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH;
+ 			}
+ 
+-			if (sashPosition > contentWidth - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH) {
+-				sashPosition = contentWidth - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH;
++			if (sashVerticalPosition > contentWidth - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH) {
++				sashVerticalPosition = contentWidth - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_WIDTH;
+ 			}
+-		} else {
+-			sashPosition = midPoint;
+ 		}
++		else {
++			sashVerticalPosition = midPointVertical;
++		}
++
++		/* 		if (contentHieght > DiffEditorWidgetSideBySide.MINIMUM_EDITOR_HEIGHT * 2) {
++					if (sashHorizontalPosition < DiffEditorWidgetSideBySide.MINIMUM_EDITOR_HEIGHT) {
++						sashHorizontalPosition = DiffEditorWidgetSideBySide.MINIMUM_EDITOR_HEIGHT;
++					}
+ 
+-		if (this._sashPosition !== sashPosition) {
+-			this._sashPosition = sashPosition;
++					if (sashHorizontalPosition > contentHieght - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_HEIGHT) {
++						sashHorizontalPosition = contentHieght - DiffEditorWidgetSideBySide.MINIMUM_EDITOR_HEIGHT;
++					}
++				}
++				else {
++					sashHorizontalPosition = midPointHorizontal;
++				} */
++
++		if (this._sashPositionVertical !== sashVerticalPosition) {
++			this._sashPositionVertical = sashVerticalPosition;
+ 		}
+-		this._sash.layout();
+ 
+-		return this._sashPosition;
++		this._sashVertical.orthogonalStartSash = this._sashHorizontal;
++		this._sashVertical.orthogonalEndSash = this._sashHorizontal;
++		console.log('versash', this._sashVertical);
++		this._sashVertical.layout();
++		return this._sashPositionVertical;
+ 	}
+ 
+-	private _onSashDragStart(): void {
+-		this._startSashPosition = this._sashPosition!;
++	private _onSashVerticalDragStart(): void {
++		this._startSashPositionVertical = this._sashPositionVertical!;
+ 	}
+ 
+-	private _onSashDrag(e: ISashEvent): void {
++	private _onSashVerticalDrag(e: ISashEvent): void {
+ 		const w = this._dataSource.getWidth();
+ 		const contentWidth = w - (this._dataSource.getOptions().renderOverviewRuler ? DiffEditorWidget.ENTIRE_DIFF_OVERVIEW_WIDTH : 0);
+-		const sashPosition = this.layout((this._startSashPosition! + (e.currentX - e.startX)) / contentWidth);
++		const sashPosition = this.layout((this._startSashPositionVertical! + (e.currentX - e.startX)) / contentWidth);
+ 
+ 		this._sashRatio = sashPosition / contentWidth;
+ 
+ 		this._dataSource.relayoutEditors();
+ 	}
+ 
+-	private _onSashDragEnd(): void {
+-		this._sash.layout();
++	private _onSashVerticalDragEnd(): void {
++		this._sashVertical.layout();
++		//this._sashHorizontal.layout();
++	}
++
++	private _onSashVerticalReset(): void {
++		this._sashRatio = 0.5;
++		this._dataSource.relayoutEditors();
++		this._sashVertical.layout();
++	}
++
++	private _onSashHorizontalDragStart(): void {
++		this._startSashPositionHorizontal = this._sashPositionHorizontal!;
++	}
++
++	private _onSashHorizontalDrag(e: ISashEvent): void {
++		const h = this._dataSource.getHeight();
++		const contentHeight = h - (this._dataSource.getOptions().renderOverviewRuler ? DiffEditorWidget.ENTIRE_DIFF_OVERVIEW_HEIGHT : 0);
++		this._startSashPositionHorizontal! = this.layout((this._startSashPositionHorizontal! + (e.currentY - e.startY)) / contentHeight);
++
++		//this._sashRatio = sashPosition / contentWidth;
++
++		this._dataSource.relayoutEditors();
++	}
++
++	private _onSashHorizontalDragEnd(): void {
++		this._sashVertical.layout();
+ 	}
+ 
+-	private _onSashReset(): void {
++	private _onSashHorizontalReset(): void {
+ 		this._sashRatio = 0.5;
+ 		this._dataSource.relayoutEditors();
+-		this._sash.layout();
++		this._sashVertical.layout();
++
+ 	}
+ 
+ 	public getVerticalSashTop(sash: Sash): number {
+@@ -2016,13 +2084,25 @@ class DiffEditorWidgetSideBySide extends DiffEditorWidgetStyle implements IVerti
+ 	}
+ 
+ 	public getVerticalSashLeft(sash: Sash): number {
+-		return this._sashPosition!;
++		return this._sashPositionVertical!;
+ 	}
+ 
+ 	public getVerticalSashHeight(sash: Sash): number {
+ 		return this._dataSource.getHeight();
+ 	}
+ 
++	public getHorizontalSashTop(sash: Sash): number {
++		return 0;//return this._sashPositionHorizontal! / 2.0;
++	}
++
++	public getHorizontalSashLeft?(sash: Sash): number {
++		return this._sashPositionHorizontal! / 2.0; //return 0;
++	}
++
++	public getHorizontalSashWidth(sash: Sash): number {
++		return this._dataSource.getWidth();
++	}
++
+ 	protected _getViewZones(lineChanges: ILineChange[], originalForeignVZ: IEditorWhitespace[], modifiedForeignVZ: IEditorWhitespace[]): IEditorsZones {
+ 		const originalEditor = this._dataSource.getOriginalEditor();
+ 		const modifiedEditor = this._dataSource.getModifiedEditor();
+-- 
+2.38.0.windows.1
+
