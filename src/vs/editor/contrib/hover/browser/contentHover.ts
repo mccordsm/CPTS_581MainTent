@@ -24,6 +24,7 @@ import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
 import { Context as SuggestContext } from 'vs/editor/contrib/suggest/browser/suggest';
 import { AsyncIterableObject } from 'vs/base/common/async';
 import { EditorContextKeys } from 'vs/editor/common/editorContextKeys';
+import { ColorHover } from 'vs/editor/contrib/colorPicker/browser/colorHoverParticipant';
 
 const $ = dom.$;
 
@@ -222,6 +223,30 @@ export class ContentHoverController extends Disposable {
 			const hoverParts = messages.filter(msg => msg.owner === participant);
 			if (hoverParts.length > 0) {
 				disposables.add(participant.renderHoverParts(context, hoverParts));
+				const colorHoverT: IHoverPart = hoverParts[0];
+				if (colorHoverT instanceof ColorHover) {
+					this._widget.getDomNode().onkeydown = (ev: KeyboardEvent) => {
+						console.log('key!!');
+						if (colorHoverT instanceof ColorHover) {
+							console.log(ev.key);
+							const colorHover: ColorHover = colorHoverT;
+							if (ev.key === 'ArrowUp') {
+								colorHover.model.color = colorHover.model.color.lighten(0.1/4);
+							} else if (ev.key === 'ArrowDown') {
+								colorHover.model.color = colorHover.model.color.darken(0.1/4);
+							} else if (ev.key === 'ArrowLeft') {
+								colorHover.model.color = colorHover.model.color.lightenLeft(0.1/4);
+							}else if (ev.key === 'ArrowRight') {
+								colorHover.model.color = colorHover.model.color.darkenRight(0.1/4);
+							} else if (ev.key === 'Enter') {
+								colorHover.model.selectNextColorPresentation();
+							} else {
+								console.log('color!!');
+								colorHover.model.color = colorHover.model.color.opposite();
+							}
+						}
+					};
+				}
 			}
 		}
 		if (statusBar.hasContent) {
