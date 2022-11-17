@@ -225,6 +225,11 @@ export async function provideSuggestionItems(
 	let needsClipboard = false;
 
 	const onCompletionList = (provider: languages.CompletionItemProvider, container: languages.CompletionList | null | undefined, sw: StopWatch): boolean => {
+		if (provider.triggerCharacters) {
+			if (provider.triggerCharacters.indexOf(':') !== -1) {
+				return false;
+			}
+		}
 		let didAddResult = false;
 		if (!container) {
 			return didAddResult;
