@@ -362,6 +362,14 @@ export class Color {
 	darken(factor: number): Color {
 		return new Color(new HSLA(this.hsla.h, this.hsla.s, this.hsla.l - this.hsla.l * factor, this.hsla.a));
 	}
+	
+	darkenRight(factor: number): Color {
+		return new Color(new HSLA(this.hsla.h, this.hsla.s + this.hsla.s * factor, this.hsla.l, this.hsla.a));
+	}
+
+	lightenLeft(factor: number): Color {
+		return new Color(new HSLA(this.hsla.h, this.hsla.s - this.hsla.s * factor, this.hsla.l, this.hsla.a));
+	}
 
 	transparent(factor: number): Color {
 		const { r, g, b, a } = this.rgba;
