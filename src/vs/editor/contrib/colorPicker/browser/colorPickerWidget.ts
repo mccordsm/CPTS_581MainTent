@@ -236,6 +236,8 @@ class SaturationBox extends Disposable {
 	private onDidChangeColor(): void {
 		if (this.monitor && this.monitor.isMonitoring()) {
 			return;
+		} else {
+			this.layout();
 		}
 		this.paint();
 	}
