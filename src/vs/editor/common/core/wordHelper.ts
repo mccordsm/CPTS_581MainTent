@@ -7,7 +7,7 @@ import { Iterable } from 'vs/base/common/iterator';
 import { toDisposable } from 'vs/base/common/lifecycle';
 import { LinkedList } from 'vs/base/common/linkedList';
 
-export const USUAL_WORD_SEPARATORS = '`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?';
+export const USUAL_WORD_SEPARATORS = '_`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?';
 
 /**
  * Word inside a model.
