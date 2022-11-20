@@ -363,11 +363,13 @@ export class Color {
 		return new Color(new HSLA(this.hsla.h, this.hsla.s, this.hsla.l - this.hsla.l * factor, this.hsla.a));
 	}
 	
-	darkenRight(factor: number): Color {
+	//moves marker to the right which makes the color darken
+	markerRight_darker(factor: number): Color {
 		return new Color(new HSLA(this.hsla.h, this.hsla.s + this.hsla.s * factor, this.hsla.l, this.hsla.a));
 	}
 
-	lightenLeft(factor: number): Color {
+	//moves marker to the left which makes the color lighten
+	markerLeft_lighter(factor: number): Color {
 		return new Color(new HSLA(this.hsla.h, this.hsla.s - this.hsla.s * factor, this.hsla.l, this.hsla.a));
 	}
 
