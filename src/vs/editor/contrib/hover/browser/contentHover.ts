@@ -232,13 +232,15 @@ export class ContentHoverController extends Disposable {
 							const colorHover: ColorHover = colorHoverT;
 							if (ev.key === 'ArrowUp') {
 								colorHover.model.color = colorHover.model.color.lighten(0.1/4);
+								colorHover.model.selectNextColorPresentation();
 							} else if (ev.key === 'ArrowDown') {
 								colorHover.model.color = colorHover.model.color.darken(0.1/4);
+								colorHover.model.selectNextColorPresentation();
 							} else if (ev.key === 'ArrowLeft') {
-								colorHover.model.color = colorHover.model.color.lightenLeft(0.1/4);
+								colorHover.model.color = colorHover.model.color.markerLeft_lighter(0.1/4);
+								colorHover.model.selectNextColorPresentation();
 							}else if (ev.key === 'ArrowRight') {
-								colorHover.model.color = colorHover.model.color.darkenRight(0.1/4);
-							} else if (ev.key === 'Enter') {
+								colorHover.model.color = colorHover.model.color.markerRight_darker(0.1/4);
 								colorHover.model.selectNextColorPresentation();
 							} else {
 								console.log('color!!');
